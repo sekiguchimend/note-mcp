@@ -1,0 +1,79 @@
+# ============================================================
+# note.com selectors & URLs  (the "fixed operation" layer)
+#
+# The AI never touches this file. Only a human updates it when
+# note changes its UI. Scenarios read everything from here so no
+# code change is needed when a selector drifts.
+#
+# NOTE: These are best-effort placeholders. They MUST be verified
+# against the live note.com DOM before production use. See README.
+# ============================================================
+
+urls:
+  base: "https://note.com"
+  login: "https://note.com/login"
+# Navigating here redirects to a per-user editor URL (editor.note.com/notes/<id>).
+  newPost: "https://editor.note.com/"
+  # {q} is URL-encoded and substituted at runtime.
+  search: "https://note.com/search?context=note&q={q}&sort=new"
+
+login:
+  # Login form (verified against live note.com DOM 2026-10-13).
+  # NOTE: the element `id`s (e.g. _r_10k_) are React-generated and change every
+  # render — never select by id. `name`/`autocomplete` are stable.
+  emailInput: 'input[name="login"], input[autocomplete="username"]'
+  passwordInput: 'input[name="password"], input[autocomplete="current-password"]'
+  # Verified: exactly one <button type="submit" data-name="Button">ログイン</button>
+  # on the login page. (Do NOT fall back to reaction-overlay here — it matches
+  # many buttons and made this ambiguous.)
+  submitButton: 'button[type="submit"]:has-text("ログイン"), button[type="submit"]'
+  # Shown only when logged in (verified 2026-10-13): the global header's
+  # "投稿" button links to /notes/new. Robust, single match.
+  loggedInMarker: 'a[href="/notes/new"], a[aria-label="新規投稿"]'
+  # Email verification code challenge (if note asks for a code).
+  codeChallengeMarker: 'input[name="code"], input[autocomplete="one-time-code"]'
+  codeInput: 'input[name="code"], input[autocomplete="one-time-code"]'
+  codeSubmitButton: 'button[type="submit"], button:has-text("認証")'
+  # reCAPTCHA iframe (if present).
+  recaptchaIframe: 'iframe[src*="recaptcha"]'
+  recaptchaSitekeyAttr: "data-sitekey"
+  recaptchaWidget: '.g-recaptcha, [data-sitekey]'
+
+editor:
+  # Verified against live editor.note.com DOM 2026-10-13.
+  # NOTE: styled-components class names (sc-xxxx, heevId, lbcMZi, gFFKVS ...) are
+  # auto-generated hashes that change on redeploy — NEVER select by them.
+  # Title field (textarea).
+  titleInput: 'textarea[placeholder="記事タイトル"]'
+  # The ProseMirror contenteditable body (.ProseMirror is library-stable).
+  bodyEditor: '.ProseMirror[contenteditable="true"], div.note-common-styles__textnote-body[contenteditable="true"]'
+  # Eyecatch (header image) upload button. Clicking opens a native file chooser.
+  imageUploadButton: 'button:has-text("画像をアップロード")'
+  # Best-effort confirm button for the image crop/position dialog (NEEDS DOM VERIFY).
+  imageCropConfirmButton: 'button:has-text("保存"), button:has-text("適用"), button:has-text("完了")'
+  # Button that opens the publish settings panel. Verified 2026-10-13: the label
+  # lives in <span id=":rg:">公開に進む</span> — the id is dynamic, match by text.
+  # Clicking navigates to a SEPARATE publish page (scenario waits 2s after).
+  proceedToPublishButton: 'button:has-text("公開に進む")'
+  # Hashtag input on the publish settings page (verified 2026-10-13).
+  hashtagInput: 'input[placeholder="ハッシュタグを追加する"]'
+  # Final publish button on the settings page (verified: single <button>投稿する).
+  publishButton: 'button:has-text("投稿する")'
+  # Save-as-draft (verified 2026-10-13: on the editor page, data-name="Button").
+  saveDraftButton: 'button:has-text("下書き保存")'
+  # Success share modal shown after publishing (verified 2026-10-13):
+  # a [role="dialog"] containing "書きあげて、すごいです！ シェアして…".
+  publishedMarker: '[role="dialog"]:has-text("書きあげて"), [role="dialog"]:has-text("シェアして")'
+
+search:
+  # Each article result card in the search results.
+  resultCard: 'article, [data-testid="note-card"]'
+  # The "スキ" (like) button inside a card.
+  likeButton: 'button[aria-label*="スキ"], [data-testid="like-button"]'
+  # How to tell a card is already liked (so we can skip it).
+  likedState:
+    # If the button has this attribute/class, it is already liked.
+    ariaPressed: "true"
+    likedClassContains: "liked"
+  # Infinite-scroll: how far to scroll to load more cards.
+  scrollStepPx: 1200
