@@ -1,70 +1,110 @@
-# note-mcp
+# note MCP — note.com 自動投稿・自動化 MCP サーバー (note mcp server)
 
-A **remote MCP server** that automates [note.com](https://note.com) **entirely through a headless Chromium** — login, article posting, and keyword-based liking (スキ). No private API is called: every action is performed by driving the real note UI, exactly as a human would.
+> **note MCP** is a remote **Model Context Protocol (MCP) server for [note.com](https://note.com)**. It lets an AI (Claude, ChatGPT, or any MCP client) **publish articles to note automatically** — login, title, Markdown body, hashtags, and publish — by driving a real headless Chromium through note's actual UI. No private API, no reverse engineering: everything happens the way a human would click.
 
-Design principle: **the AI only produces content** (title / body / tags / keyword / count). All "where to click / when / in what order" is fixed in the server (selectors live in `config/selectors.yaml`). The AI never reasons about operations.
+**日本語**: **note を自動投稿**するための **MCP サーバー**です。AI には「記事の内容」だけを生成させ、ログイン・本文入力（Markdown→note エディタ）・ハッシュタグ・公開といった操作はすべてサーバー側で固定化しています。完全ヘッドレス・リモート運用前提。
 
-## What it does
+<p>
+<img alt="MCP" src="https://img.shields.io/badge/protocol-MCP-black">
+<img alt="note.com" src="https://img.shields.io/badge/platform-note.com-41c9b4">
+<img alt="Playwright" src="https://img.shields.io/badge/engine-Playwright-2ead33">
+<img alt="TypeScript" src="https://img.shields.io/badge/lang-TypeScript-3178c6">
+<img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
+</p>
 
-| MCP tool | Purpose |
+**Keywords**: note mcp · note MCP server · note.com MCP · MCP note · note 自動投稿 · note 自動化 · note bot · Model Context Protocol note · Claude note 連携 · AI で note に投稿 · note API 代替 · Playwright note automation.
+
+---
+
+## なぜ note MCP なのか / Why note MCP
+
+note には公開された投稿 API がありません。**note MCP** は、公式 UI をそのまま自動操作することでこの制約を回避し、AI から安全に記事を投稿できるようにします。
+
+- 🤖 **AI は内容だけを考える** — ツールの入力は `title` / `body` (Markdown) / `tags` / `publish` のみ。クリック位置やタイミングは一切 AI に推論させない（全部サーバーで固定）。
+- 📝 **Markdown をそのまま note の装飾に変換** — 見出し・太字・箇条書き・番号付きリスト・引用を、note エディタ（ProseMirror）の実キーボードショートカットで再現。
+- 🔐 **完全ヘッドレスの自動ログイン** — Gmail IMAP による認証コード自動取得、2captcha 互換の CAPTCHA 解決に対応。
+- 🕵️ **アンチ検知** — `playwright-extra` stealth・固定フィンガープリント・プロキシ・人間的な入力/待機。
+- 🌐 **リモート MCP (Streamable HTTP)** — どの MCP クライアント（Claude Code / Claude Desktop など）からも接続可能。
+- ✅ **実機検証済み** — ログイン・下書き保存・公開（ハッシュタグ＋投稿成功判定）まで実アカウントで動作確認。
+
+## 機能 / MCP tools
+
+| Tool | 役割 / What it does |
 |---|---|
-| `note_post_article` | Post (or save as draft) an article. Body is Markdown; formatting is reproduced in note's editor. |
-| `note_like_by_keyword` | Search a keyword and like the newest N results, with a daily limit + randomized pacing. |
-| `note_run_batch` | Run several post/like jobs under **one login** (recommended — fewer logins = lower ban risk). |
-| `note_session_status` | Diagnostic: can the configured account log in right now? |
+| `note_post_article` | note に記事を**投稿／下書き保存**。`title`, `body`(Markdown), `tags`, `publish`, 任意の `imageUrl`(見出し画像)。 |
+| `note_like_by_keyword` | 検索キーワードで記事を**スキ**（日次上限・ランダム間隔つき）。 |
+| `note_run_batch` | 複数ジョブを**1ログイン**でまとめて実行（ログイン回数を減らしアカウント保護）。 |
+| `note_session_status` | ログイン可否の診断。 |
 
-## Chosen operating profile
-
-Per the project decisions, this build runs the **most aggressive** profile:
-
-- **Login every run** (no persisted session). To offset ban risk, batch jobs under one login via `note_run_batch`.
-- **Fully headless auto-login**, including:
-  - **Email verification codes** auto-read from Gmail over IMAP (`src/auth/emailCode.ts`).
-  - **reCAPTCHA** solved via a 2captcha-compatible service (`src/auth/captcha.ts`).
-- **Anti-detection**: `playwright-extra` + stealth plugin, a **stable** fingerprint, residential/mobile **proxy**, and human-like typing/click pacing.
-
-> ⚠️ Headless + login-every-run is the highest-ban-risk combination. The safeguards above reduce — but do not eliminate — the risk. Use a proxy and keep like volumes modest.
-
-## Architecture
+## アーキテクチャ / Architecture
 
 ```
-MCP (Streamable HTTP) → Tool layer (thin) → serial queue → scenario layer (fixed steps)
-                                                              → Playwright (stealth, headless)
+MCP client (AI)
+   │  Streamable HTTP
+   ▼
+note-mcp server ── thin tool layer ── serial queue ── fixed scenario layer
+                                                         └─ Playwright (stealth, headless) ─▶ note.com
 ```
 
-- `src/index.ts` — Express + MCP Streamable HTTP endpoint (`POST/GET/DELETE /mcp`).
-- `src/tools/register.ts` — MCP tool definitions (content-only inputs).
-- `src/queue.ts` — serial queue so only one browser runs at a time.
-- `src/scenarios/` — `post.ts`, `like.ts`, `markdownToEditor.ts`, `runSession.ts`, `likeBudget.ts`.
-- `src/auth/` — `login.ts`, `emailCode.ts`, `captcha.ts`.
-- `src/browser/` — `launch.ts` (stealth/proxy/fingerprint), `humanize.ts`.
-- `config/selectors.yaml` — **all** note selectors/URLs. The only file to touch when note changes its UI.
+- `src/index.ts` — Express + MCP Streamable HTTP endpoint (`POST/GET/DELETE /mcp`)
+- `src/tools/register.ts` — MCP tool 定義（入力は**内容のみ**）
+- `src/scenarios/` — `post.ts` / `like.ts` / `markdownToEditor.ts` / `runSession.ts`
+- `src/auth/` — `login.ts` / `emailCode.ts` (Gmail IMAP) / `captcha.ts`
+- `src/browser/` — `launch.ts` (stealth/proxy/fingerprint) / `humanize.ts`
+- `config/selectors.yaml` — note の全セレクタ。**UI 変更時はここだけ**直せばよい（コード不要）。
 
-## Setup
+## セットアップ / Quick start
 
 ```bash
-npm install            # also runs `playwright install chromium`
-cp .env.example .env   # fill in credentials & services
+git clone https://github.com/sekiguchimend/note-mcp.git
+cd note-mcp
+npm install                 # runs `playwright install chromium`
+cp .env.example .env        # fill in credentials
 npm run build
-npm start
+npm start                   # Streamable HTTP MCP server on :8787
 ```
 
-For headless servers, run Chromium with the OS deps installed (`npx playwright install-deps chromium`).
+ヘッドレスサーバーでは依存を入れてください: `npx playwright install --with-deps chromium`
 
-### Required `.env` values
+### `.env`（主要項目）
 
-- `NOTE_EMAIL`, `NOTE_PASSWORD`
-- `GMAIL_IMAP_USER`, `GMAIL_IMAP_PASSWORD` (Gmail **app password**, IMAP enabled) — for verification codes
-- `PROXY_URL` — strongly recommended (residential/mobile)
-- `CAPTCHA_API_KEY` + `CAPTCHA_ENABLED=true` — only if note challenges with reCAPTCHA
-- `MCP_AUTH_TOKEN` — optional bearer token to protect the remote endpoint
+```ini
+NOTE_EMAIL=...              # note のログインメール
+NOTE_PASSWORD=...           # note のパスワード
+HEADLESS=true
+PROXY_URL=                  # 推奨: 住宅/モバイルプロキシ
+GMAIL_IMAP_USER=            # 認証コード自動取得(アプリパスワード)
+GMAIL_IMAP_PASSWORD=
+CAPTCHA_API_KEY=            # reCAPTCHA が出る場合のみ (2captcha 互換)
+MCP_AUTH_TOKEN=             # 任意: エンドポイント保護用 Bearer トークン
+```
 
-## ⚠️ Selectors must be verified
+## 動作確認 / CLI test harness
 
-`config/selectors.yaml` ships with **best-effort placeholder selectors**. note.com's real DOM (class names, data-testids, the ProseMirror editor, the publish flow, the search/like markup) must be confirmed against the live site and the YAML updated before production use. Nothing in the code needs to change — only the YAML.
+MCP クライアント無しで単体テストできます:
 
-The Markdown→editor translator (`markdownToEditor.ts`) relies on note's live input autoformatting (`# `, `- `, `> `, fenced code) plus `Ctrl+B`/`Ctrl+I` for inline styles. If note's editor behaves differently, adjust that file.
+```bash
+npm run test:check     # ログインページのセレクタ確認（認証情報不要）
+npm run test:login     # ログインのみ
+npm run test:post      # ログイン＋下書き投稿（publish:false なので公開されない）
+```
 
-## Connecting a client
+## MCP クライアント接続 / Connecting a client
 
-Point an MCP client at `http://<host>:<PORT>/mcp` using the **Streamable HTTP** transport. If `MCP_AUTH_TOKEN` is set, send `Authorization: Bearer <token>`.
+`http://<host>:8787/mcp` に **Streamable HTTP** で接続。`MCP_AUTH_TOKEN` を設定した場合は `Authorization: Bearer <token>` を付与。
+
+## note エディタの実挙動メモ / Verified note editor behavior
+
+実機調査で判明した、note エディタ（ProseMirror）を正しく操作するための要点:
+
+- note は Markdown を自動変換しない → ショートカットで装飾
+- **Enter 1 回 = 改行 / Enter 2 回 = 新しい段落**（リスト内は Enter 2 回で脱出）
+- 大見出し `Ctrl+Alt+2` / 小見出し `Ctrl+Alt+3` / 箇条書き `Ctrl+Shift+8` / 番号 `Ctrl+Shift+7` / 引用 `Ctrl+Shift+.` / 太字 `Ctrl+B`（斜体は非対応）
+
+## 注意 / Disclaimer
+
+本ツールは自分のアカウントの作業自動化を目的とした教育・研究用です。note の利用規約と、スパム/自動化に関する各種ポリシーを遵守してください。大量のスキ・短時間の連投はアカウント停止につながる可能性があります。
+
+## License
+
+MIT © [sekiguchimend](https://github.com/sekiguchimend)

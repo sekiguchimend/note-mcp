@@ -2,7 +2,36 @@
   "name": "note-mcp",
   "version": "0.1.0",
   "private": true,
-  "description": "Remote MCP server that drives note.com entirely through a headless Chromium (login, post, like-by-keyword).",
+  "description": "note MCP server — a remote Model Context Protocol (MCP) server for note.com that lets an AI auto-post articles (login, Markdown body, hashtags, publish) via a real headless Chromium. note 自動投稿・自動化 MCP.",
+  "keywords": [
+    "note",
+    "note.com",
+    "note-mcp",
+    "note mcp",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "claude",
+    "ai",
+    "llm",
+    "anthropic",
+    "playwright",
+    "automation",
+    "auto-posting",
+    "note自動投稿",
+    "note自動化",
+    "bot"
+  ],
+  "homepage": "https://github.com/sekiguchimend/note-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sekiguchimend/note-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sekiguchimend/note-mcp/issues"
+  },
+  "license": "MIT",
+  "author": "sekiguchimend",
   "type": "module",
   "bin": {
     "note-mcp": "dist/index.js"
