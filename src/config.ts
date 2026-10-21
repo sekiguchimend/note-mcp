@@ -51,10 +51,10 @@ export const config = {
     proxyUrl: str("PROXY_URL"),
   },
   gmail: {
-    enabled: bool("GMAIL_IMAP_ENABLED", true),
+    enabled: bool("GMAIL_IMAP_ENABLED", false),
     host: str("GMAIL_IMAP_HOST", "imap.gmail.com"),
     port: num("GMAIL_IMAP_PORT", 993),
-    user: str("GMAIL_IMAP_USER"),
+    user: str("GMAIL_IMAP_USER", str("NOTE_EMAIL")),
     password: str("GMAIL_IMAP_PASSWORD"),
     codeTimeoutSec: num("EMAIL_CODE_TIMEOUT_SEC", 120),
   },
