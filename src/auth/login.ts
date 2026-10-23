@@ -53,7 +53,9 @@ export async function login(page: Page): Promise<void> {
   // 5) Confirm.
   await page.waitForSelector(S.loggedInMarker, { timeout: 30_000 }).catch(() => undefined);
   if (!(await isLoggedIn(page))) {
-    throw new LoginError("login did not reach a logged-in state (check selectors/credentials/challenge)");
+    const diag = await diagnose(page);
+    logger.error({ diag }, "login failed");
+    throw new LoginError(`login did not reach a logged-in state | ${diag}`);
   }
   logger.info("login succeeded");
 
@@ -61,6 +63,45 @@ export async function login(page: Page): Promise<void> {
   // after login. Navigating away too soon throws the whole login away, so we
   // settle here (fixed wait) before ANY navigation happens.
   await sleep(3500);
+}
+
+// Describe where the login flow stopped so the MCP error is actionable.
+async function diagnose(page: Page): Promise<string> {
+  const url = page.url();
+  const count = (sel: string) => page.locator(sel).count().catch(() => -1);
+  const [pwField, recaptchaFrames, codeField] = await Promise.all([
+    count(S.passwordInput),
+    count('iframe[src*="recaptcha"], iframe[title*="reCAPTCHA"]'),
+    count(S.codeChallengeMarker),
+  ]);
+  // Any visible error/alert text near the form (e.g. wrong password).
+  const alertText = await page
+    .evaluate(() => {
+      const nodes = Array.from(
+        document.querySelectorAll('[role="alert"], [aria-live], .o-error, [class*="error" i], [class*="Error"]'),
+      );
+      return nodes
+        .map((n) => (n as HTMLElement).innerText?.trim())
+        .filter((t) => t && t.length < 200)
+        .slice(0, 3)
+        .join(" / ");
+    })
+    .catch(() => "");
+  await page.screenshot({ path: "artifacts/login-failed.png", fullPage: true }).catch(() => undefined);
+
+  let stage: string;
+  if (/\/login/.test(url) && pwField > 0) {
+    stage = alertText
+      ? "STILL_ON_LOGIN_WITH_ERROR (credentials rejected or blocked)"
+      : recaptchaFrames > 0
+        ? "STILL_ON_LOGIN_RECAPTCHA (bot check after submit)"
+        : "STILL_ON_LOGIN_NO_MESSAGE (submit ignored or silently blocked)";
+  } else if (codeField > 0) {
+    stage = "CODE_CHALLENGE (verification code requested)";
+  } else {
+    stage = "LEFT_LOGIN_BUT_NO_MARKER (likely logged in; loggedInMarker selector outdated)";
+  }
+  return `stage=${stage} url=${url} alert="${alertText}" recaptchaFrames=${recaptchaFrames}`;
 }
 
 export async function isLoggedIn(page: Page): Promise<boolean> {
